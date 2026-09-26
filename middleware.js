@@ -7,10 +7,10 @@ import { NextResponse } from 'next/server';
 export function middleware(req) {
   const { pathname } = req.nextUrl;
 
-  // حماية مسارات الأدمن من الدخول المباشر بالـ URL
+  // حماية مسارات الأدمن من الدخول المباشر بالـ URL - توجيه فوري على مستوى الـ Edge
   if (pathname.startsWith('/admin')) {
     const userRole = req.cookies.get('user_role')?.value;
-    if (userRole && userRole !== 'admin') {
+    if (userRole !== 'admin') {
       const url = req.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('error', 'admin-required');
