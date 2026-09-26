@@ -7,19 +7,30 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}));
     const { type, phone, email, password, code } = body;
 
-    // 1. تسجيل الدخول كمسؤول (Admin) - يتطلب كلمة مرور الأدمن
+    // 1. تسجيل الدخول كمسؤول (Admin) - اسم مستخدم / هاتف + كلمة مرور
     if (type === 'admin') {
-      const result = await loginAsAdmin({ password });
+      const result = await loginAsAdmin({
+        username: body.username,
+        phone: body.phone,
+        identifier: body.identifier || body.username || body.phone,
+        password: body.password,
+      });
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: 401 });
       }
-      return NextResponse.json(result);
+      const res = NextResponse.json(result);
+      res.cookies.set('sb_token', result.token, { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      res.cookies.set('user_role', result.user.role, { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      return res;
     }
 
     // 2. تسجيل الدخول كطالب تجريبي (معاينة مجانية)
     if (type === 'guest') {
       const result = await loginAsGuest();
-      return NextResponse.json(result);
+      const res = NextResponse.json(result);
+      res.cookies.set('sb_token', result.token, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      res.cookies.set('user_role', result.user.role, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      return res;
     }
 
     // 3. تسجيل الدخول برقم الهاتف وكلمة المرور
@@ -31,7 +42,10 @@ export async function POST(req) {
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: 401 });
       }
-      return NextResponse.json(result);
+      const res = NextResponse.json(result);
+      res.cookies.set('sb_token', result.token, { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      res.cookies.set('user_role', result.user.role, { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      return res;
     }
 
     // 4. تسجيل الدخول بالبريد الإلكتروني وكلمة المرور

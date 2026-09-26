@@ -5,6 +5,20 @@ import { NextResponse } from 'next/server';
  * ده بيغطي طبقة الحماية العامة اللي كانت متعملة بـ helmet في نسخة Node/Express.
  */
 export function middleware(req) {
+  const { pathname } = req.nextUrl;
+
+  // حماية مسارات الأدمن من الدخول المباشر بالـ URL
+  if (pathname.startsWith('/admin')) {
+    const userRole = req.cookies.get('user_role')?.value;
+    if (userRole && userRole !== 'admin') {
+      const url = req.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'admin-required');
+      url.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(url);
+    }
+  }
+
   const res = NextResponse.next();
 
   res.headers.set('X-Frame-Options', 'SAMEORIGIN');
