@@ -1,114 +1,84 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase-browser';
 
 export default function SignupPage() {
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [academicYear, setAcademicYear] = useState('الصف الثالث الثانوي');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const supabase = createClient();
 
   async function handleSignup(e) {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('كلمة المرور يجب أن تتكون من 8 أحرف على الأقل.');
+    const cleanName = fullName.trim();
+    const cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+
+    if (!cleanName || cleanName.length < 3) {
+      setError('يرجى إدخال اسم الطالب ثلاثي على الأقل');
       return;
     }
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setError('يرجى إدخال رقم هاتف صحيح مكون من 11 رقماً (مثال: 01012345678)');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('كلمة المرور يجب أن تتكون من 6 أحرف أو أرقام على الأقل');
+      return;
+    }
+
     if (password !== confirmPassword) {
-      setError('كلمتا المرور غير متطابقتين.');
+      setError('كلمتا المرور غير متطابقتين، يرجى إعادة التأكد');
       return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error: signupError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: cleanName,
+          phone: cleanPhone,
+          academicYear,
+          email: email.trim(),
+          password,
+          confirmPassword,
+        }),
       });
 
+      const data = await res.json().catch(() => ({}));
       setLoading(false);
 
-      if (signupError) {
-        const msg = signupError.message || '';
-        if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('user already exists')) {
-          setError('هذا البريد الإلكتروني مسجل بالفعل في منصة العربي شتاين - جرّب تسجيل الدخول.');
-        } else if (msg.toLowerCase().includes('invalid')) {
-          setError('صيغة البريد الإلكتروني غير صحيحة أو غير مقبولة.');
-        } else {
-          setError(signupError.message || 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً.');
-        }
+      if (!res.ok || data.error) {
+        setError(data.error || 'حدث خطأ أثناء إنشاء الحساب، يرجى المحاولة لاحقاً');
         return;
       }
 
-      // إذا كانت الجلسة متاحة فوراً (بدون اشتراط تأكيد الإيميل)
-      if (data?.session) {
-        localStorage.setItem('sb_access_token', data.session.access_token);
-        localStorage.setItem('user_email', email);
-        window.location.href = '/redeem';
-      } else {
-        // تأكيد البريد مطلوب من إعدادات Supabase
-        setSuccess(true);
+      if (data.token) {
+        localStorage.setItem('sb_access_token', data.token);
+        localStorage.setItem('user_email', data.user?.email || '');
+        localStorage.setItem('user_role', data.user?.role || 'student');
+        localStorage.setItem('user_name', data.user?.full_name || cleanName);
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       setLoading(false);
-      setError('تعذر الاتصال بالخادم، تأكد من اتصال الإنترنت وحاول مجدداً.');
+      setError('تعذر الاتصال بالخادم، يرجى التأكد من اتصال الإنترنت والمحاولة مجدداً');
     }
-  }
-
-  if (success) {
-    return (
-      <div className="auth-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 54, marginBottom: 12 }}>🎉</div>
-          <div className="auth-badge">تم إنشاء الحساب بنجاح</div>
-          <h2 className="auth-title">أهلاً بك في العربي شتاين!</h2>
-          <div className="alert alert-info" style={{ textAlign: 'right', marginTop: 16 }}>
-            <div>
-              <strong>تأكيد البريد الإلكتروني:</strong>
-              <p style={{ margin: '6px 0 0', fontSize: 13 }}>
-                تم إرسال رابط تأكيد إلى بريدك الإلكتروني <strong>{email}</strong>. يرجى الضغط على الرابط في رسالتك لتفعيل الحساب، ثم سجل دخولك للمنصة.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={async () => {
-              const res = await fetch('/api/auth/instant-login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'google', email }),
-              });
-              const d = await res.json().catch(() => ({}));
-              if (d?.token) {
-                localStorage.setItem('sb_access_token', d.token);
-                localStorage.setItem('user_email', email);
-                window.location.href = '/dashboard';
-              }
-            }}
-            className="btn btn-primary btn-block"
-            style={{ marginTop: 20, padding: 12 }}
-          >
-            🚀 الدخول الفوري للمنصة الآن (تخطي التأكيد)
-          </button>
-          <Link href="/login" className="btn btn-secondary btn-block" style={{ marginTop: 8, padding: 10 }}>
-            الذهاب لصفحة تسجيل الدخول
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-card" style={{ maxWidth: 500 }}>
         <div style={{ textAlign: 'center' }}>
           <div className="auth-badge">⚛️ منصة فيزياء الثانوية العامة</div>
           <h2 className="auth-title">إنشاء حساب طالب جديد</h2>
@@ -123,58 +93,118 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
+          {/* اسم الطالب */}
           <div className="form-group">
-            <label className="form-label">البريد الإلكتروني</label>
+            <label className="form-label">
+              اسم الطالب بالكامل <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="مثال: أحمد محمد محمود"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+
+          {/* رقم الهاتف */}
+          <div className="form-group">
+            <label className="form-label">
+              رقم الهاتف المحمول (الموبايل) <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              type="tel"
+              className="form-input"
+              placeholder="01012345678"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+              dir="ltr"
+              style={{ textAlign: 'right' }}
+            />
+            <p className="form-hint">يُستخدم للدخول إلى حسابك واستلام بيانات الاشتراك</p>
+          </div>
+
+          {/* الصف الدراسي */}
+          <div className="form-group">
+            <label className="form-label">الصف الدراسي</label>
+            <select
+              className="form-input"
+              value={academicYear}
+              onChange={(e) => setAcademicYear(e.target.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              <option value="الصف الثالث الثانوي">الصف الثالث الثانوي (الشهادة الثانوية العامة)</option>
+              <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
+              <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
+            </select>
+          </div>
+
+          {/* البريد الإلكتروني (اختياري) */}
+          <div className="form-group">
+            <label className="form-label">
+              البريد الإلكتروني <span style={{ fontSize: 12, color: '#94a3b8' }}>(اختياري)</span>
+            </label>
             <input
               type="email"
               className="form-input"
-              placeholder="example@domain.com"
+              placeholder="student@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
+              dir="ltr"
+              style={{ textAlign: 'right' }}
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label">كلمة المرور (8 أحرف على الأقل)</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+          {/* كلمة المرور وتأكيدها */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">
+                كلمة المرور <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                dir="ltr"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">
+                تأكيد كلمة المرور <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                dir="ltr"
+              />
+            </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">تأكيد كلمة المرور</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary btn-block" disabled={loading} style={{ padding: 12, fontSize: 16 }}>
-            {loading ? (
-              <>
-                <span className="spinner" style={{ width: 16, height: 16 }}></span>
-                جارٍ إنشاء الحساب...
-              </>
-            ) : (
-              'إنشاء الحساب الآن 🚀'
-            )}
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={loading}
+            style={{ padding: 14, fontSize: 16, marginTop: 8 }}
+          >
+            {loading ? 'جارٍ إنشاء الحساب...' : 'إنشاء الحساب وبدء الدراسة 🚀'}
           </button>
         </form>
 
-        <div className="auth-footer">
-          لديك حساب بالفعل؟{' '}
+        <div className="auth-footer" style={{ marginTop: 20 }}>
+          لديك حساب مسجل بالفعل؟{' '}
           <Link href="/login" style={{ fontWeight: 800 }}>
-            تسجيل الدخول
+            تسجيل الدخول الآن
           </Link>
         </div>
       </div>

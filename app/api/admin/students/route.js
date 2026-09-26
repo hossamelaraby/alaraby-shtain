@@ -6,20 +6,31 @@ export async function GET(req) {
   const check = await requireAdmin(req);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
-  // نجيب كل الطلاب (role = student) مع عدد كورساتهم
+  // نجيب كل الطلاب (role = student) من جدول profiles
   const { data: students, error } = await check.supabase
     .from('profiles')
-    .select('id, email, role, accepted_tos, created_at, enrollments(count)')
+    .select('id, email, phone, full_name, role, accepted_tos, is_blocked, created_at')
     .eq('role', 'student')
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // نضيف حالة القفل لكل طالب (مخزّنة في Redis مش في قاعدة البيانات)
+  // جلب عدد اشتراكات كل طالب
+  const { data: enrollments } = await check.supabase
+    .from('enrollments')
+    .select('user_id');
+
+  const counts = {};
+  (enrollments || []).forEach((e) => {
+    counts[e.user_id] = (counts[e.user_id] || 0) + 1;
+  });
+
+  // دمج حالة القفل من قاعدة البيانات وRedis
   const withLockStatus = await Promise.all(
-    students.map(async (s) => ({
+    (students || []).map(async (s) => ({
       ...s,
-      locked: !!(await isLocked(s.id)),
+      enrollments_count: counts[s.id] || 0,
+      locked: !!s.is_blocked || !!(await isLocked(s.id)),
     }))
   );
 
@@ -37,12 +48,14 @@ export async function POST(req) {
 
   if (action === 'lock') {
     await lockAccount(student_id, reason || 'تم الحظر يدويًا من الأدمن');
+    await check.supabase.from('profiles').update({ is_blocked: true }).eq('id', student_id);
     return NextResponse.json({ success: true });
   }
 
   if (action === 'unlock') {
     const { redis } = await import('@/lib/rate-limit');
-    await redis.del(`locked:${student_id}`);
+    if (redis) await redis.del(`locked:${student_id}`);
+    await check.supabase.from('profiles').update({ is_blocked: false }).eq('id', student_id);
     return NextResponse.json({ success: true });
   }
 

@@ -10,7 +10,7 @@ export default function AdminStudentsPage() {
 
   async function load() {
     const { ok, body } = await adminFetch('/api/admin/students');
-    if (ok) setStudents(body.students);
+    if (ok) setStudents(body.students || []);
   }
 
   useEffect(() => {
@@ -31,9 +31,15 @@ export default function AdminStudentsPage() {
     load();
   }
 
-  const filtered = students?.filter((s) =>
-    (s.email || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = students?.filter((s) => {
+    const term = search.toLowerCase().trim();
+    if (!term) return true;
+    return (
+      (s.email || '').toLowerCase().includes(term) ||
+      (s.phone || '').toLowerCase().includes(term) ||
+      (s.full_name || '').toLowerCase().includes(term)
+    );
+  });
 
   return (
     <div className="container">
@@ -53,7 +59,7 @@ export default function AdminStudentsPage() {
         <input
           type="text"
           className="form-input"
-          placeholder="🔍 ابحث عن طالب بالبريد الإلكتروني..."
+          placeholder="🔍 ابحث عن طالب بالاسم أو رقم الموبايل أو البريد..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -68,7 +74,8 @@ export default function AdminStudentsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>البريد الإلكتروني للطالب</th>
+                <th>بيانات الطالب</th>
+                <th>رقم الهاتف</th>
                 <th>عدد الكورسات</th>
                 <th>حالة الحساب</th>
                 <th>تاريخ التسجيل</th>
@@ -78,19 +85,22 @@ export default function AdminStudentsPage() {
             <tbody>
               {filtered?.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
-                    لا يوجد طلاب مطابقين للبحث
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                    {students.length === 0 ? 'لم يتم تسجيل أي طلاب في المنصة بعد' : 'لا يوجد طلاب مطابقين للبحث'}
                   </td>
                 </tr>
               ) : (
                 filtered?.map((s) => (
                   <tr key={s.id}>
                     <td>
-                      <strong style={{ fontSize: 14 }}>{s.email}</strong>
-                      <span style={{ display: 'block', fontSize: 11, color: '#94a3b8' }}>ID: {s.id.slice(0, 8)}...</span>
+                      <strong style={{ fontSize: 14, display: 'block' }}>{s.full_name || s.email?.split('@')[0] || 'طالب فيزياء'}</strong>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>{s.email || '—'}</span>
+                    </td>
+                    <td dir="ltr" style={{ textAlign: 'right', fontWeight: 600 }}>
+                      {s.phone || '—'}
                     </td>
                     <td>
-                      <span className="badge badge-info">{s.enrollments?.[0]?.count || 0} كورس</span>
+                      <span className="badge badge-info">{s.enrollments_count || 0} كورس</span>
                     </td>
                     <td>
                       {s.locked ? (
