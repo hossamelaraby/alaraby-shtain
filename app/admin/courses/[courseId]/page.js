@@ -10,9 +10,20 @@ export default function ManageCoursePage() {
   const [videos, setVideos] = useState(null);
   const [videoTitle, setVideoTitle] = useState('');
   const [storagePath, setStoragePath] = useState('');
+  const [videoDescription, setVideoDescription] = useState('');
   const [unlockDays, setUnlockDays] = useState(0);
   const [videoError, setVideoError] = useState('');
   const [addingVideo, setAddingVideo] = useState(false);
+
+  // حالة تعديل المحاضرة
+  const [editingVideo, setEditingVideo] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editStoragePath, setEditStoragePath] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editUnlockDays, setEditUnlockDays] = useState(0);
+  const [editOrderIndex, setEditOrderIndex] = useState(1);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [quantity, setQuantity] = useState(10);
   const [batchLabel, setBatchLabel] = useState('');
@@ -47,6 +58,7 @@ export default function ManageCoursePage() {
         course_id: courseId,
         title: videoTitle,
         storage_path: storagePath,
+        description: videoDescription,
         unlock_after_days: unlockDays,
         order_index: (videos?.length || 0) + 1,
       }),
@@ -58,8 +70,56 @@ export default function ManageCoursePage() {
     }
     setVideoTitle('');
     setStoragePath('');
+    setVideoDescription('');
     setUnlockDays(0);
     loadVideos();
+  }
+
+  function openEditModal(v) {
+    setEditingVideo(v);
+    setEditTitle(v.title || '');
+    setEditStoragePath(v.storage_path || '');
+    setEditDescription(v.description || '');
+    setEditUnlockDays(v.unlock_after_days || 0);
+    setEditOrderIndex(v.order_index || 1);
+  }
+
+  async function handleSaveEdit(e) {
+    e.preventDefault();
+    if (!editingVideo) return;
+    setSavingEdit(true);
+    const { ok, body } = await adminFetch('/api/admin/videos', {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: editingVideo.id,
+        title: editTitle,
+        storage_path: editStoragePath,
+        description: editDescription,
+        unlock_after_days: editUnlockDays,
+        order_index: editOrderIndex,
+      }),
+    });
+    setSavingEdit(false);
+    if (ok) {
+      setEditingVideo(null);
+      loadVideos();
+    } else {
+      alert(body.error || 'تعذر حفظ التعديلات');
+    }
+  }
+
+  async function handleDeleteVideo(v) {
+    if (!confirm(`هل أنت متأكد من حذف محاضرة "${v.title}"؟`)) return;
+    setDeletingId(v.id);
+    const { ok, body } = await adminFetch(`/api/admin/videos?id=${v.id}`, {
+      method: 'DELETE',
+    });
+    setDeletingId(null);
+    if (ok) {
+      loadVideos();
+    } else {
+      alert(body.error || 'تعذر حذف المحاضرة');
+    }
   }
 
   async function handleGenerateCodes(e) {
@@ -96,7 +156,7 @@ export default function ManageCoursePage() {
         <div>
           <h2>⚙️ إدارة محتوى وأكواد الكورس</h2>
           <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>
-            إضافة دروس ومحاضرات، توليد أكواد الاشتراك للطلاب، وإعداد الامتحانات
+            إضافة دروس ومحاضرات، تعديل الروابط والوصف، وتوليد أكواد الاشتراك
           </p>
         </div>
         <Link href="/admin/courses" className="btn btn-secondary">
@@ -105,17 +165,19 @@ export default function ManageCoursePage() {
       </div>
 
       {/* ---------- إضافة درس جديد ---------- */}
-      <section className="card">
+      <section className="card" style={{ marginBottom: 24 }}>
         <h3 style={{ marginBottom: 14 }}>➕ إضافة محاضرة / درس جديد</h3>
         {videoError && (
-          <div className="alert alert-danger">
+          <div className="alert alert-danger" style={{ marginBottom: 14 }}>
             <span>⚠️</span>
             <div>{videoError}</div>
           </div>
         )}
         <form onSubmit={handleAddVideo}>
           <div className="form-group">
-            <label className="form-label">عنوان الدرس</label>
+            <label className="form-label">
+              عنوان المحاضرة <span style={{ color: '#ef4444' }}>*</span>
+            </label>
             <input
               type="text"
               className="form-input"
@@ -127,16 +189,33 @@ export default function ManageCoursePage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">معرّف الفيديو (Video ID)</label>
+            <label className="form-label">
+              رابط أو معرّف الفيديو (URL / Video ID) <span style={{ color: '#ef4444' }}>*</span>
+            </label>
             <input
               type="text"
               className="form-input"
-              placeholder="نفس المعرف المستخدم عند تشفير ورفع الفيديو (مثال: physics-lesson-01)"
+              placeholder="مثال: https://youtu.be/q5gHTl5kdGw أو رابط مباشر MP4 أو كود التشفير"
               value={storagePath}
               onChange={(e) => setStoragePath(e.target.value)}
               required
+              dir="ltr"
+              style={{ textAlign: 'right' }}
             />
-            <p className="form-hint">هذا المعرف يطابق مجلد الفيديو المشفر في الـ Storage</p>
+            <p className="form-hint">
+              يدعم روابط YouTube بكل صيغها (تلقائياً وبأمان)، أو روابط الفيديو المباشرة، أو معرف الفيديو المشفر.
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">وصف وملاحظات المحاضرة (اختياري)</label>
+            <textarea
+              className="form-input"
+              rows={2}
+              placeholder="اكتب نبذة عن موضوع الدرس، القوانين المشروحة، أو ملاحظات للطلاب..."
+              value={videoDescription}
+              onChange={(e) => setVideoDescription(e.target.value)}
+            />
           </div>
 
           <div className="form-group">
@@ -150,54 +229,91 @@ export default function ManageCoursePage() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={addingVideo}>
+          <button type="submit" className="btn btn-primary" disabled={addingVideo} style={{ padding: '10px 24px' }}>
             {addingVideo ? 'جارٍ إضافة المحاضرة...' : 'إضافة المحاضرة للكورس 🚀'}
           </button>
         </form>
 
-        <div style={{ marginTop: 24 }}>
-          <h4 style={{ marginBottom: 12 }}>دروس ومحاضرات الكورس</h4>
+        {/* ---------- قائمة دروس ومحاضرات الكورس مع أدوات التعديل والحذف ---------- */}
+        <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid #e2e8f0' }}>
+          <h4 style={{ marginBottom: 14, fontSize: 16 }}>🎬 دروس ومحاضرات الكورس الحالية</h4>
           {videos === null && <div className="skeleton skeleton-text"></div>}
           {videos?.length === 0 && (
             <p style={{ color: '#94a3b8', fontSize: 14 }}>لم يتم إضافة دروس بعد لهذا الكورس</p>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {videos?.map((v) => (
               <div
                 key={v.id}
                 style={{
-                  padding: '12px 14px',
+                  padding: '14px 16px',
                   background: '#f8fafc',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   border: '1px solid #e2e8f0',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   flexWrap: 'wrap',
-                  gap: 10,
+                  gap: 12,
                 }}
               >
-                <div>
-                  <strong style={{ fontSize: 15 }}>
-                    {v.order_index}. {v.title}
-                  </strong>
-                  {v.unlock_after_days > 0 ? (
-                    <span className="badge badge-warning" style={{ marginRight: 8 }}>
-                      يُفتح بعد {v.unlock_after_days} يوم
-                    </span>
-                  ) : (
-                    <span className="badge badge-success" style={{ marginRight: 8 }}>
-                      متاح فوراً
-                    </span>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 15 }}>
+                      {v.order_index}. {v.title}
+                    </strong>
+                    {v.unlock_after_days > 0 ? (
+                      <span className="badge badge-warning">
+                        يُفتح بعد {v.unlock_after_days} يوم
+                      </span>
+                    ) : (
+                      <span className="badge badge-success">متاح فوراً</span>
+                    )}
+                  </div>
+
+                  {v.description && (
+                    <p style={{ margin: '4px 0 0', fontSize: 13, color: '#475569' }}>
+                      {v.description}
+                    </p>
                   )}
-                  <span style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginTop: 2 }}>
-                    ID: {v.storage_path}
-                  </span>
+
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, wordBreak: 'break-all' }} dir="ltr">
+                    🔗 {v.storage_path}
+                  </div>
                 </div>
-                <Link href={`/admin/quizzes/${v.id}`} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: 13 }}>
-                  📝 بنك امتحان الدرس
-                </Link>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* زر تعديل المحاضرة */}
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(v)}
+                    className="btn btn-outline"
+                    style={{ padding: '6px 12px', fontSize: 13, borderColor: '#0284c7', color: '#0284c7' }}
+                  >
+                    ✏️ تعديل
+                  </button>
+
+                  {/* بنك امتحان الدرس */}
+                  <Link
+                    href={`/admin/quizzes/${v.id}`}
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: 13 }}
+                  >
+                    📝 بنك الامتحان
+                  </Link>
+
+                  {/* زر حذف المحاضرة */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteVideo(v)}
+                    disabled={deletingId === v.id}
+                    className="btn btn-danger"
+                    style={{ padding: '6px 12px', fontSize: 13 }}
+                  >
+                    {deletingId === v.id ? 'جارٍ الحذف...' : '🗑️ حذف'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -210,7 +326,7 @@ export default function ManageCoursePage() {
           <div>
             <h3>🎟️ توليد وتوزيع أكواد الاشتراك</h3>
             <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
-              توليد أكواد مشفرة غير قابلة للتكرار ليستخدمها الطالب في تفعيل الكورس
+              توليد أكواد مشفرة غير قابلة للتكرار ليستخدمها الطالب في تفعيل الكورس فورياً
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -220,14 +336,14 @@ export default function ManageCoursePage() {
         </div>
 
         {codeError && (
-          <div className="alert alert-danger">
+          <div className="alert alert-danger" style={{ marginBottom: 14 }}>
             <span>⚠️</span>
             <div>{codeError}</div>
           </div>
         )}
 
         <form onSubmit={handleGenerateCodes}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             <div className="form-group">
               <label className="form-label">عدد الأكواد المطلوبة (حتى 500 كود)</label>
               <input
@@ -240,7 +356,6 @@ export default function ManageCoursePage() {
                 required
               />
             </div>
-
             <div className="form-group">
               <label className="form-label">تسمية الدفعة (مثال: سنتر السرايا - أكتوبر)</label>
               <input
@@ -254,15 +369,23 @@ export default function ManageCoursePage() {
           </div>
 
           <button type="submit" className="btn btn-primary" disabled={generatingCodes}>
-            {generatingCodes ? 'جارٍ توليد الأكواد...' : `توليد ${quantity} كود اشتراك جديد 🎟️`}
+            {generatingCodes ? 'جارٍ توليد الأكواد في قاعدة البيانات...' : 'توليد الأكواد الآن 🚀'}
           </button>
         </form>
 
         {generatedCodes && (
-          <div style={{ marginTop: 20, padding: 18, background: '#f0f9ff', border: '1.5px solid #bae6fd', borderRadius: 10 }}>
+          <div
+            style={{
+              marginTop: 20,
+              padding: 16,
+              background: '#f0f9ff',
+              borderRadius: 8,
+              border: '1px solid #bae6fd',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <strong style={{ color: '#0369a1', fontSize: 15 }}>
-                ✅ تم توليد {generatedCodes.length} كود بنجاح:
+              <strong style={{ color: '#0369a1' }}>
+                🎉 تم توليد {generatedCodes.length} كود جديد بنجاح:
               </strong>
               <button
                 type="button"
@@ -298,6 +421,132 @@ export default function ManageCoursePage() {
           </div>
         )}
       </section>
+
+      {/* ---------- نافذة تعديل إعدادات المحاضرة (Modal) ---------- */}
+      {editingVideo && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16,
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: 550,
+              width: '100%',
+              margin: 0,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>✏️ تعديل بيانات المحاضرة</h3>
+              <button
+                type="button"
+                onClick={() => setEditingVideo(null)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit}>
+              <div className="form-group">
+                <label className="form-label">
+                  عنوان المحاضرة <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  رابط أو معرّف الفيديو (URL / Video ID) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editStoragePath}
+                  onChange={(e) => setEditStoragePath(e.target.value)}
+                  required
+                  dir="ltr"
+                  style={{ textAlign: 'right' }}
+                />
+                <p className="form-hint">
+                  يدعم روابط YouTube أو روابط MP4 المباشرة أو معرّف الفيديو المشفر
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">وصف وملاحظات المحاضرة</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="ملاحظات حول القوانين المشروحة والواجب..."
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">ترتيب المحاضرة</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    min={1}
+                    value={editOrderIndex}
+                    onChange={(e) => setEditOrderIndex(Number(e.target.value))}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">يُفتح بعد كم يوم؟</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    min={0}
+                    value={editUnlockDays}
+                    onChange={(e) => setEditUnlockDays(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingEdit}
+                  style={{ padding: 10, fontSize: 15 }}
+                >
+                  {savingEdit ? 'جارٍ الحفظ...' : 'حفظ التعديلات ✅'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingVideo(null)}
+                  className="btn btn-secondary"
+                  style={{ padding: 10, fontSize: 15 }}
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

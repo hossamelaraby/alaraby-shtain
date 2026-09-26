@@ -28,11 +28,13 @@ export function middleware(req) {
     'Content-Security-Policy',
     "default-src 'self'; " +
     "media-src 'self' blob: https:; " +
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.youtube.com https://player.vimeo.com https://drive.google.com; " +
+    "child-src 'self' blob: https://www.youtube.com https://www.youtube-nocookie.com https://*.youtube.com; " +
     "frame-ancestors 'self'; " +
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.youtube.com https://s.ytimg.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com data:; " +
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://accounts.google.com https://*.vercel.app; " +
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://accounts.google.com https://*.vercel.app https://*.youtube.com https://www.youtube-nocookie.com; " +
     "img-src 'self' data: https: blob:;"
   );
   res.headers.set(
