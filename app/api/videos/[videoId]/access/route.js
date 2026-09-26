@@ -41,7 +41,6 @@ export async function POST(req, { params }) {
     return NextResponse.json({
       videoType: 'youtube',
       youtubeId: source.youtubeId,
-      embedUrl: source.embedUrl,
       title: video.title,
       expiresInSeconds: 3600,
     });
