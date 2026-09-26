@@ -32,6 +32,27 @@ export default function ManageCoursePage() {
   const [codeError, setCodeError] = useState('');
   const [generatingCodes, setGeneratingCodes] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [codesFilter, setCodesFilter] = useState('all'); // 'all' | 'available' | 'used'
+  const [codesSearch, setCodesSearch] = useState('');
+  const [copiedCode, setCopiedCode] = useState(null);
+
+  function copySingle(code) {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }
+
+  function copyAllAvailable() {
+    if (!existingCodes) return;
+    const available = existingCodes.filter((c) => !c.used_by).map((c) => c.code);
+    if (available.length === 0) {
+      alert('لا توجد أكواد متاحة للنسخ حالياً');
+      return;
+    }
+    navigator.clipboard.writeText(available.join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
 
   async function loadVideos() {
     const { ok, body } = await adminFetch(`/api/admin/videos?course_id=${courseId}`);
@@ -149,6 +170,18 @@ export default function ManageCoursePage() {
 
   const usedCount = existingCodes?.filter((c) => c.used_by).length || 0;
   const unusedCount = (existingCodes?.length || 0) - usedCount;
+
+  const filteredCodes = (existingCodes || []).filter((c) => {
+    if (codesFilter === 'available' && c.used_by) return false;
+    if (codesFilter === 'used' && !c.used_by) return false;
+    if (codesSearch.trim()) {
+      const q = codesSearch.trim().toLowerCase();
+      const codeMatch = c.code.toLowerCase().includes(q);
+      const batchMatch = c.batch_label ? c.batch_label.toLowerCase().includes(q) : false;
+      return codeMatch || batchMatch;
+    }
+    return true;
+  });
 
   return (
     <div className="container">
@@ -420,6 +453,164 @@ export default function ManageCoursePage() {
             </div>
           </div>
         )}
+
+        {/* قائمة جميع الأكواد السابقة وإمكانية استعراضها ونسخها */}
+        <div style={{ marginTop: 26, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>
+                📋 سجل الأكواد المنشأة سابقاً لهذا الكورس ({existingCodes?.length || 0})
+              </h4>
+              <p style={{ margin: '3px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                يمكنك استعراض الأكواد، ومعرفة المستخدم منها والمتاح، ونسخ كود فردي أو نسخ جميع الأكواد المتاحة دفعة واحدة
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={copyAllAvailable}
+                className="btn btn-primary"
+                style={{ padding: '7px 16px', fontSize: 13, fontWeight: 700 }}
+              >
+                {copied ? '✅ تم نسخ الأكواد المتاحة!' : `📋 نسخ كل الأكواد المتاحة (${unusedCount})`}
+              </button>
+            </div>
+          </div>
+
+          {/* فلاتر وبحث الأكواد */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.06)', padding: 3, borderRadius: 8 }}>
+              <button
+                type="button"
+                onClick={() => setCodesFilter('all')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  background: codesFilter === 'all' ? '#0284c7' : 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+              >
+                الكل ({existingCodes?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCodesFilter('available')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  background: codesFilter === 'available' ? '#16a34a' : 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+              >
+                متاح فقط ({unusedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCodesFilter('used')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  background: codesFilter === 'used' ? '#dc2626' : 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+              >
+                مستخدم ({usedCount})
+              </button>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="🔍 بحث في الأكواد أو اسم الدفعة..."
+                value={codesSearch}
+                onChange={(e) => setCodesSearch(e.target.value)}
+                style={{ padding: '6px 12px', fontSize: 13 }}
+              />
+            </div>
+          </div>
+
+          {/* جدول الأكواد */}
+          {(!existingCodes || existingCodes.length === 0) ? (
+            <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8', fontSize: 13, background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+              لم يتم توليد أي أكواد لهذا الكورس بعد.
+            </div>
+          ) : (
+            <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
+              <table className="table" style={{ margin: 0, width: '100%', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'right' }}>الكود</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'right' }}>الدفعة / السنتر</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center' }}>الحالة</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center' }}>تاريخ التوليد</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center' }}>نسخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCodes.map((c) => {
+                    const isUsed = !!c.used_by;
+                    return (
+                      <tr key={c.code} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontWeight: 800, fontSize: 14, color: isUsed ? '#94a3b8' : '#38bdf8' }}>
+                          {c.code}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#cbd5e1' }}>
+                          {c.batch_label || '—'}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          {isUsed ? (
+                            <span className="badge badge-danger" style={{ fontSize: 11 }}>
+                              مستخدم {c.used_at ? `(${new Date(c.used_at).toLocaleDateString('ar-EG')})` : ''}
+                            </span>
+                          ) : (
+                            <span className="badge badge-success" style={{ fontSize: 11 }}>
+                              جاهز ومتاح
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+                          {c.created_at ? new Date(c.created_at).toLocaleDateString('ar-EG') : '—'}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => copySingle(c.code)}
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 12px', fontSize: 12, background: 'rgba(255,255,255,0.08)' }}
+                            title="نسخ الكود"
+                          >
+                            {copiedCode === c.code ? '✅ تم النسخ' : '📋 نسخ'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredCodes.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
+                        لا توجد نتائج مطابقة لبحثك
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* ---------- نافذة تعديل إعدادات المحاضرة (Modal) ---------- */}

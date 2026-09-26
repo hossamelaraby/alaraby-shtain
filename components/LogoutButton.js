@@ -87,14 +87,15 @@ export default function LogoutButton() {
     );
   }
 
-  // لو مش مسجل وهو في صفحة تانية غير الدخول/التسجيل
-  if (pathname !== '/login' && pathname !== '/signup') {
-    return (
-      <Link href="/login" className="btn btn-primary" style={{ padding: '6px 14px', fontSize: 13 }}>
-        تسجيل الدخول
-      </Link>
-    );
+  // إخفاء الزر تماماً في لوحة التحكم الإدارية لأن لها شريط أدمن خاص بها، وكذلك في صفحات الدخول والتسجيل
+  if (pathname?.startsWith('/admin') || pathname === '/login' || pathname === '/signup') {
+    return null;
   }
 
-  return null;
+  // لو مش مسجل دخول وهو في صفحة عادية
+  return (
+    <Link href="/login" className="btn btn-primary" style={{ padding: '6px 14px', fontSize: 13 }}>
+      تسجيل الدخول
+    </Link>
+  );
 }
