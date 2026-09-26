@@ -34,9 +34,41 @@ export async function POST(req, { params }) {
 
   await logAccess(supabase, { userId, videoId, ip, userAgent });
 
+  const { parseVideoSource } = await import('@/lib/video-parser');
+  const source = parseVideoSource(video.storage_path);
+
+  if (source.type === 'youtube') {
+    return NextResponse.json({
+      videoType: 'youtube',
+      youtubeId: source.youtubeId,
+      embedUrl: source.embedUrl,
+      title: video.title,
+      expiresInSeconds: 3600,
+    });
+  }
+
+  if (source.type === 'direct_url') {
+    return NextResponse.json({
+      videoType: 'direct',
+      videoUrl: source.url,
+      title: video.title,
+      expiresInSeconds: 3600,
+    });
+  }
+
+  if (source.type === 'hls_url') {
+    return NextResponse.json({
+      videoType: 'hls',
+      manifestUrl: source.url,
+      title: video.title,
+      expiresInSeconds: 3600,
+    });
+  }
+
   const token = issueVideoToken(userId, videoId, fingerprint, 90);
 
   return NextResponse.json({
+    videoType: 'hls',
     manifestUrl: `/api/videos/${videoId}/manifest?token=${token}`,
     expiresInSeconds: 90,
   });

@@ -95,24 +95,86 @@ export async function POST(req) {
       return NextResponse.json({ success: true, user, token });
     }
 
-    // 5. تسجيل الدخول بكود الطالب
+    // 5. تسجيل الدخول بكود الطالب مع التفعيل الفوري التلقائي للكورس
     if (type === 'code' && code) {
       const cleanCode = code.trim().toUpperCase();
       const supabase = createServiceClient();
-      const { data: codeRow } = await supabase
+      const { data: codeRow, error: codeErr } = await supabase
         .from('enrollment_codes')
-        .select('id, course_id, used_by')
+        .select('id, course_id, used_by, expires_at')
         .eq('code', cleanCode)
         .maybeSingle();
 
+      if (codeErr || !codeRow) {
+        return NextResponse.json({ error: 'كود الطالب غير صحيح، يرجى التأكد من كتابة الكود بشكل سليم' }, { status: 404 });
+      }
+
+      if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
+        return NextResponse.json({ error: 'هذا الكود منتهي الصلاحية' }, { status: 410 });
+      }
+
+      let userId;
+      let studentName = `طالب (${cleanCode})`;
+      let studentEmail = `${cleanCode}@student.alaraby-shtain.com`;
+
+      if (codeRow.used_by) {
+        userId = codeRow.used_by;
+        const { data: existingProf } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (existingProf) {
+          studentName = existingProf.full_name || studentName;
+          studentEmail = existingProf.email || studentEmail;
+        }
+      } else {
+        userId = stringToUuid(`student_code_${cleanCode}`);
+
+        // إنشاء حساب الطالب في profiles
+        await supabase.from('profiles').upsert({
+          id: userId,
+          full_name: studentName,
+          email: studentEmail,
+          phone: cleanCode,
+          role: 'student',
+          accepted_tos: true,
+          is_blocked: false,
+        });
+
+        // تسجيل الكود كمستخدم لهذا الطالب
+        await supabase.from('enrollment_codes').update({
+          used_by: userId,
+          used_at: new Date().toISOString(),
+        }).eq('id', codeRow.id);
+      }
+
+      // تفعيل اشتراك الطالب في الكورس فورياً ودون أي خطوات إضافية
+      await supabase.from('enrollments').upsert({
+        user_id: userId,
+        course_id: codeRow.course_id,
+      });
+
       const user = {
-        id: stringToUuid(`code_${cleanCode}`),
-        email: `${cleanCode}@student.alaraby-shtain.com`,
-        full_name: `طالب (${cleanCode})`,
+        id: userId,
+        email: studentEmail,
+        full_name: studentName,
         role: 'student',
       };
+
       const token = issueAuthToken(user);
-      return NextResponse.json({ success: true, user, token, codeFound: !!codeRow });
+      const res = NextResponse.json({
+        success: true,
+        user,
+        token,
+        course_id: codeRow.course_id,
+        redirectUrl: '/dashboard',
+      });
+
+      res.cookies.set('sb_token', token, { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      res.cookies.set('user_role', 'student', { path: '/', maxAge: 30 * 86400, sameSite: 'lax' });
+      return res;
     }
 
     return NextResponse.json({ error: 'طريقة الدخول غير محددة أو غير مدعومة' }, { status: 400 });

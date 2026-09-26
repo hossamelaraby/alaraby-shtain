@@ -212,7 +212,7 @@ export default function LoginPage() {
         setError(data.error || 'الكود غير صحيح أو منتهي الصلاحية');
         return;
       }
-      handleAuthSuccess(data, '/dashboard');
+      handleAuthSuccess(data, data.redirectUrl || '/dashboard');
     } catch (err) {
       setLoading(false);
       setError('تعذر الاتصال بالخادم');
